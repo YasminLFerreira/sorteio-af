@@ -49,6 +49,10 @@ dialog .nome{font-size:clamp(30px,8vw,46px);font-weight:800;color:var(--azul);li
 const API = 'https://script.google.com/macros/s/AKfycbxvrNkpyINCOfrsTIVRvdqtCtIv3S_CU9UoHtzFs9dvA3QQKrxIvc9RbwKqB-5YCdOGWg/exec';
 // ==============================================================
 
+const S = { chave: sessionStorage.chave || '', eventos: [], slug: '', rows: [], aba: 'part' };
+const COL = ['#12307f', '#2f55b8', '#d6282f', '#0b1d52'];
+let rot = 0, spinning = false, pool = [];
+
 const $ = s => document.querySelector(s), app = $('#app'), q = new URLSearchParams(location.search);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(d) {
@@ -99,10 +103,6 @@ async function form(slug) {
 }
 
 /* ---------- Painel da equipe ---------- */
-const S = { chave: sessionStorage.chave || '', eventos: [], slug: '', rows: [], aba: 'part' };
-const COL = ['#12307f', '#2f55b8', '#d6282f', '#0b1d52'];
-let rot = 0, spinning = false, pool = [];
-
 function admin() { app.className = 'largo'; S.chave ? carregarEventos() : login(); }
 
 function login(erro) {
