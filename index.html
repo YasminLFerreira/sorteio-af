@@ -127,7 +127,7 @@ async function carregarPart() {
 
 function painel() {
   app.innerHTML = `<h1>Painel da equipe</h1>
-  <div class="barra"><label style="margin:0">Evento<select id="ev">${S.eventos.map(e => `<option value="${esc(e.slug)}" ${e.slug === S.slug ? 'selected' : ''}>${esc(e.nome)}</option>`).join('') || '<option value="">Nenhum evento ainda</option>'}</select></label>
+  <div class="barra"><label style="margin:0">Evento<select id="ev">${S.eventos.map(e => `<option value="${esc(e.slug)}" ${e.slug === S.slug ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select></label>
   <button class="btn sec" id="novo">Criar evento</button></div>
   ${S.slug ? `<div class="abas"><button class="btn ${S.aba === 'part' ? 'on' : 'sec'}" data-a="part">Participantes</button><button class="btn ${S.aba === 'qr' ? 'on' : 'sec'}" data-a="qr">QR Code</button><button class="btn ${S.aba === 'rol' ? 'on' : 'sec'}" data-a="rol">Roleta</button></div><section class="card" id="vista"></section>` : '<section class="card"><p>Crie o primeiro evento para gerar o QR Code.</p></section>'}`;
   $('#ev').onchange = e => { S.slug = e.target.value; rot = 0; carregarPart(); };
