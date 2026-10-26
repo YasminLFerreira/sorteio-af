@@ -214,7 +214,7 @@ function girar() {
 
 function ganhador(r) {
   const d = $('#dlg');
-  d.innerHTML = `<p>A pessoa sorteada é</p><p class="nome">${esc(r.nome)}</p><p>${esc(r.telefone)} · ${r.aluno === 'sim' ? 'aluno(a)' : 'não aluno(a)'}</p>
+  d.innerHTML = `<p>A pessoa sorteada é</p><p class="nome">${esc(r.nome)}</p>
   <button class="btn" id="ok">Confirmar ganhador(a)</button><br><button class="btn sec" id="de">Sortear de novo</button>`;
   d.showModal();
   $('#de').onclick = () => { d.close(); filtrar(); };
