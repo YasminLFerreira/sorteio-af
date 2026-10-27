@@ -293,9 +293,9 @@ function ganhador(r) {
   d.showModal();
   $('#de').onclick = () => { d.close(); filtrar(); };
   $('#ok').onclick = async () => {
-    $('#ok'].disabled = true;
+    $('#ok').disabled = true;
     const x = await api({ acao: 'ganhou', chave: S.chave, slug: S.slug, linha: r.linha });
-    if (!x.ok) { $('#ok'].disabled = false; return alert('Não foi possível salvar. Tente de novo.'); }
+    if (!x.ok) { $('#ok').disabled = false; return alert('Não foi possível salvar. Tente de novo.'); }
     r.ganhou = 'sim'; d.close(); vRol();
   };
 }
