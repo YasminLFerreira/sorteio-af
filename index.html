@@ -17,7 +17,7 @@ h1{font-size:clamp(28px,6vw,40px);line-height:1.1;font-weight:800;margin:0 0 8px
 h2{font-size:22px;margin:0 0 12px;color:var(--azul)}
 .marca{font-weight:600;color:var(--vermelho);margin:0 0 14px}
 label{display:block;font-weight:600;margin:16px 0 0}
-input[type=text],input[type=tel],input[type=password],select{width:100%;font:inherit;padding:12px;border:2px solid #b9c4e0;border-radius:4px;margin-top:6px;background:#fff}
+input[type=text],input[type=email],input[type=password],select{width:100%;font:inherit;padding:12px;border:2px solid #b9c4e0;border-radius:4px;margin-top:6px;background:#fff}
 fieldset{border:0;padding:0;margin:20px 0 0}legend{font-weight:600;padding:0}
 .opt{display:flex;gap:10px;align-items:center;font-weight:400;margin:8px 0 0}
 .opt input{width:22px;height:22px;accent-color:var(--azul)}
@@ -50,7 +50,7 @@ dialog .nome{font-size:clamp(30px,8vw,46px);font-weight:800;color:var(--azul);li
 const API = 'https://script.google.com/macros/s/AKfycbxvrNkpyINCOfrsTIVRvdqtCtIv3S_CU9UoHtzFs9dvA3QQKrxIvc9RbwKqB-5YCdOGWg/exec';
 // ==============================================================
 
-const S = { chave: sessionStorage.chave || '', eventos: [], slug: '', rows: [], aba: 'part', verTel: false };
+const S = { chave: sessionStorage.chave || '', eventos: [], slug: '', rows: [], aba: 'part', verEmail: false };
 const COL = ['#12307f', '#2f55b8', '#d6282f', '#0b1d52'];
 let rot = 0, spinning = false, pool = [];
 
@@ -72,22 +72,48 @@ async function form(slug) {
     app.innerHTML = '<section class="card"><p>Carregando…</p></section>';
     let info; try { info = await api({ acao: 'info', slug }); } catch { info = null; }
     if (!info || !info.ok) { app.innerHTML = '<section class="card"><h1>Evento não encontrado</h1><p>Confira o QR Code ou fale com a equipe.</p></section>'; return; }
+    if (info.encerrado) { app.innerHTML = '<section class="card"><h1>Inscrições encerradas</h1><p>Este evento já foi encerrado e não aceita mais cadastros.</p></section>'; return; }
     nomeEvento = info.nome;
+  } else {
+    // Validação rápida de status caso venha direto por parâmetro
+    let info; try { info = await api({ acao: 'info', slug }); } catch {}
+    if (info && info.encerrado) { app.innerHTML = '<section class="card"><h1>Inscrições encerradas</h1><p>Este evento já foi encerrado e não aceita mais cadastros.</p></section>'; return; }
   }
+
   app.innerHTML = `<section class="card"><p class="marca">Aliança Francesa Rio</p><h1>${esc(nomeEvento)}</h1>
   <p>Cadastre-se para concorrer ao sorteio de ingressos.</p>
   <form id="f">
     <label>Nome completo<input type="text" name="nome" required autocomplete="name"></label>
-    <label>Telefone com DDD<input type="tel" name="telefone" required autocomplete="tel" inputmode="tel" placeholder="(21) 99999-9999"></label>
+    <label>E-mail<input type="email" name="email" required autocomplete="email" placeholder="seu@email.com"></label>
+    
     <fieldset><legend>Você é aluno(a) da Aliança Francesa?</legend>
       <label class="opt"><input type="radio" name="aluno" value="sim" required> Sim</label>
       <label class="opt"><input type="radio" name="aluno" value="não"> Não</label></fieldset>
+    
     <fieldset id="fi" hidden><legend>Tem interesse em aprender francês?</legend>
       <label class="opt"><input type="radio" name="interesse" value="sim"> Sim</label>
       <label class="opt"><input type="radio" name="interesse" value="não"> Não</label></fieldset>
+
+    <fieldset><legend>Aceita receber a newsletter e novidades da Aliança Francesa por e-mail?</legend>
+      <label class="opt"><input type="radio" name="newsletter" value="sim" required> Sim</label>
+      <label class="opt"><input type="radio" name="newsletter" value="não"> Não</label></fieldset>
+
+    <label>Como ficou sabendo do evento?
+      <select name="como_soube" required>
+        <option value="">Selecione...</option>
+        <option value="Instagram">Instagram</option>
+        <option value="WhatsApp">WhatsApp</option>
+        <option value="TikTok">TikTok</option>
+        <option value="Amigos / Conhecidos">Amigos / Conhecidos</option>
+        <option value="E-mail da AF">E-mail da AF</option>
+        <option value="Outros">Outros</option>
+      </select>
+    </label>
+
     <label class="opt" style="margin-top:22px"><input type="checkbox" required> <span>Autorizo o uso dos meus dados para o sorteio e para contato da Aliança Francesa.</span></label>
     <button class="btn" id="go">Cadastrar</button><p id="msg" role="status"></p>
   </form></section>`;
+
   const f = $('#f');
   f.addEventListener('change', () => {
     const nao = f.aluno.value === 'não';
@@ -97,17 +123,25 @@ async function form(slug) {
   f.addEventListener('submit', async e => {
     e.preventDefault();
     const b = $('#go'), m = $('#msg'); b.disabled = true; m.textContent = '';
-    const d = { acao: 'cadastrar', slug, nome: f.nome.value, telefone: f.telefone.value, aluno: f.aluno.value, interesse: f.interesse.value };
-    const fatal = { dados: 'Confira o nome e o telefone com DDD.', evento: 'Evento não encontrado. Confira o QR Code ou fale com a equipe.' };
+    const d = { 
+      acao: 'cadastrar', 
+      slug, 
+      nome: f.nome.value, 
+      email: f.email.value, 
+      aluno: f.aluno.value, 
+      interesse: f.aluno.value === 'não' ? f.interesse.value : '', 
+      newsletter: f.newsletter.value, 
+      como_soube: f.como_soube.value 
+    };
+    const fatal = { dados: 'Confira os dados preenchidos.', evento: 'Evento não encontrado ou encerrado.' };
     for (let t = 0; t < 4; t++) {
       if (t) { m.textContent = 'Conexão instável, tentando de novo…'; await new Promise(ok => setTimeout(ok, 1500 * t + Math.random() * 1500)); }
       try {
         const r = await api(d);
-        // "duplicado" depois de uma tentativa anterior significa que o primeiro envio chegou
         if (r.ok || (r.erro === 'duplicado' && t)) {
           app.innerHTML = `<section class="card"><p class="marca">Aliança Francesa Rio</p><h1>Cadastro feito!</h1><p>Boa sorte, ${esc(d.nome.split(' ')[0])}. O sorteio será feito pela equipe durante o evento.</p></section>`; return;
         }
-        if (r.erro === 'duplicado') { m.textContent = 'Este telefone já está cadastrado neste evento.'; break; }
+        if (r.erro === 'duplicado') { m.textContent = 'Este e-mail já está cadastrado neste evento.'; break; }
         if (fatal[r.erro]) { m.textContent = fatal[r.erro]; break; }
       } catch {}
     }
@@ -142,16 +176,29 @@ async function carregarPart() {
 
 function painel() {
   const optionsHtml = S.eventos.length 
-    ? S.eventos.map(e => `<option value="${esc(e.slug)}" ${e.slug === S.slug ? 'selected' : ''}>${esc(e.nome)}</option>`).join('') 
+    ? S.eventos.map(e => `<option value="${esc(e.slug)}" ${e.slug === S.slug ? 'selected' : ''}>${esc(e.nome)} ${e.encerrado ? '(Encerrado)' : ''}</option>`).join('') 
     : '<option value="">Nenhum evento ainda</option>';
+
+  const evAtual = S.eventos.find(e => e.slug === S.slug);
+  const textoEncerrar = evAtual && evAtual.encerrado ? 'Reabrir inscrições' : 'Encerrar evento';
 
   app.innerHTML = `<h1>Painel da equipe</h1>
   <div class="barra"><label style="margin:0">Evento<select id="ev">${optionsHtml}</select></label>
-  <button class="btn sec" id="novo">Criar evento</button></div>
+  <button class="btn sec" id="novo">Criar evento</button>
+  ${S.slug ? `<button class="btn sec" id="toggle-encerrar" style="background:#ffe8e8;color:#d6282f">${textoEncerrar}</button>` : ''}</div>
   ${S.slug ? `<div class="abas"><button class="btn ${S.aba === 'part' ? 'on' : 'sec'}" data-a="part">Participantes</button><button class="btn ${S.aba === 'qr' ? 'on' : 'sec'}" data-a="qr">QR Code</button><button class="btn ${S.aba === 'rol' ? 'on' : 'sec'}" data-a="rol">Roleta</button></div><section class="card" id="vista"></section>` : '<section class="card"><p>Crie o primeiro evento para gerar o QR Code.</p></section>'}`;
   
   $('#ev').onchange = e => { S.slug = e.target.value; rot = 0; carregarPart(); };
   $('#novo').onclick = criar;
+  if ($('#toggle-encerrar')) {
+    $('#toggle-encerrar').onclick = async () => {
+      const acaoStr = evAtual && evAtual.encerrado ? 'reabrir' : 'encerrar';
+      if (!confirm(`Deseja realmente ${acaoStr} este evento?`)) return;
+      const r = await api({ acao: 'toggle_encerrar', chave: S.chave, slug: S.slug });
+      if (r.ok) carregarEventos(true);
+      else alert('Não foi possível alterar o status do evento.');
+    };
+  }
   document.querySelectorAll('[data-a]').forEach(b => b.onclick = () => { S.aba = b.dataset.a; painel(); });
   if (S.slug) ({ part: vPart, qr: vQR, rol: vRol })[S.aba]();
 }
@@ -167,14 +214,22 @@ async function criar() {
 function vPart() {
   const n = S.rows.length, al = S.rows.filter(r => r.aluno === 'sim').length;
   $('#vista').innerHTML = `<h2>${n} cadastro${n === 1 ? '' : 's'} (${al} aluno${al === 1 ? '' : 's'})</h2>
-  <button class="btn sec" id="vt" style="margin:0 0 12px">${S.verTel ? 'Ocultar telefones' : 'Mostrar telefones'}</button>
-  <div class="rolo"><table><thead><tr><th>Nome</th><th>Telefone</th><th>Aluno</th><th>Interesse</th><th>Ganhou</th></tr></thead><tbody>
-  ${S.rows.map(r => `<tr><td>${esc(r.nome)}</td><td>${S.verTel ? esc(r.telefone) : mascara(r.telefone)}</td><td>${esc(r.aluno)}</td><td>${esc(r.interesse)}</td><td>${esc(r.ganhou)}</td></tr>`).join('') || '<tr><td colspan="5">Ninguém se cadastrou ainda.</td></tr>'}
+  <button class="btn sec" id="vt" style="margin:0 0 12px">${S.verEmail ? 'Ocultar e-mails' : 'Mostrar e-mails'}</button>
+  <div class="rolo"><table><thead><tr><th>Data/Hora</th><th>Nome</th><th>E-mail</th><th>Aluno?</th><th>Interesse em francês?</th><th>Aceita Newsletter?</th><th>Como soube?</th><th>Ganhou?</th></tr></thead><tbody>
+  ${S.rows.map(r => `<tr><td>${esc(r.data)}</td><td>${esc(r.nome)}</td><td>${S.verEmail ? esc(r.email) : mascaraEmail(r.email)}</td><td>${esc(r.aluno)}</td><td>${esc(r.interesse)}</td><td>${esc(r.newsletter)}</td><td>${esc(r.comoSoube)}</td><td>${esc(r.ganhou)}</td></tr>`).join('') || '<tr><td colspan="8">Ninguém se cadastrou ainda.</td></tr>'}
   </tbody></table></div><button class="btn sec" id="at">Atualizar lista</button>`;
   $('#at').onclick = carregarPart;
-  $('#vt').onclick = () => { S.verTel = !S.verTel; vPart(); };
+  $('#vt').onclick = () => { S.verEmail = !S.verEmail; vPart(); };
 }
-function mascara(t) { const d = String(t || '').replace(/\D/g, ''); return d ? '••••• ' + d.slice(-4) : ''; }
+function mascaraEmail(e) {
+  const str = String(e || '');
+  const partes = str.split('@');
+  if (partes.length !== 2) return '•••••@••••';
+  const usuario = partes[0];
+  const dominio = partes[1];
+  const visivel = usuario.slice(0, 2);
+  return visivel + '••••@' + dominio;
+}
 
 function vQR() {
   const ev = S.eventos.find(e => e.slug === S.slug);
@@ -238,9 +293,9 @@ function ganhador(r) {
   d.showModal();
   $('#de').onclick = () => { d.close(); filtrar(); };
   $('#ok').onclick = async () => {
-    $('#ok').disabled = true;
+    $('#ok'].disabled = true;
     const x = await api({ acao: 'ganhou', chave: S.chave, slug: S.slug, linha: r.linha });
-    if (!x.ok) { $('#ok').disabled = false; return alert('Não foi possível salvar. Tente de novo.'); }
+    if (!x.ok) { $('#ok'].disabled = false; return alert('Não foi possível salvar. Tente de novo.'); }
     r.ganhou = 'sim'; d.close(); vRol();
   };
 }
