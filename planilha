@@ -1,0 +1,170 @@
+// Backend do cadastro + sorteio. Cole em Extensões > Apps Script de uma Google Planilha.
+// 1) Troque a senha abaixo. 2) Implantar > Nova implantação > App da Web
+//    (Executar como: eu / Quem pode acessar: Qualquer pessoa). 3) Copie a URL /exec para o index.html.
+
+const CHAVE_ADMIN = 'ALIANCAFRANCESARIO';
+const CAB = [
+  'Data e Hora do Cadastro', 
+  'Nome Completo', 
+  'E-mail', 
+  'É aluno(a) da Aliança Francesa?', 
+  'Tem interesse em aprender francês?', 
+  'Aceita receber a newsletter?', 
+  'Como ficou sabendo do evento?', 
+  'Ganhou o Sorteio?'
+];
+
+function doPost(e) {
+  let r;
+  try { r = rota(JSON.parse(e.postData.contents)); }
+  catch (err) { r = { ok: false, erro: String(err) }; }
+  return ContentService.createTextOutput(JSON.stringify(r)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function planilha() { return SpreadsheetApp.getActiveSpreadsheet(); }
+
+function lista() {
+  let s = planilha().getSheetByName('eventos');
+  if (!s) { 
+    s = planilha().insertSheet('eventos'); 
+    s.appendRow(['slug', 'nome', 'criado', 'encerrado']); 
+    estilizarCabecalho(s);
+  }
+  return s;
+}
+
+function evento(slug) {
+  const l = lista();
+  const rows = l.getDataRange().getValues().slice(1);
+  const v = rows.find(r => r[0] === slug);
+  return v ? { slug: v[0], nome: v[1], encerrado: Boolean(v[3]) } : null;
+}
+
+function seguro(s) { // evita fórmulas injetadas na planilha
+  s = String(s || '').trim().slice(0, 120);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
+
+function estilizarCabecalho(sheet) {
+  sheet.setFrozenRows(1);
+  const maxCol = sheet.getLastColumn();
+  
+  // Define o tamanho de todas as colunas para 175 px e aplica formatação visual (Centralizado, Ajustar texto)
+  for (let i = 1; i <= maxCol; i++) {
+    sheet.setColumnWidth(i, 175);
+  }
+
+  const rangeTotal = sheet.getDataRange();
+  rangeTotal.setHorizontalAlignment('center');
+  rangeTotal.setVerticalAlignment('middle');
+  rangeTotal.setWrap(true);
+
+  // Estilo específico do cabeçalho (Linha 1)
+  const rangeCab = sheet.getRange(1, 1, 1, maxCol);
+  rangeCab.setBackground('#12307f'); // Azul institucional da Aliança Francesa
+  rangeCab.setFontColor('#ffffff'); // Texto branco
+  rangeCab.setFontWeight('bold');
+}
+
+function rota(d) {
+  if (d.acao === 'info') { 
+    const ev = evento(d.slug); 
+    if (!ev) return { ok: false };
+    return { ok: true, nome: ev.nome, encerrado: ev.encerrado }; 
+  }
+  if (d.acao === 'cadastrar') return cadastrar(d);
+
+  if (d.chave !== CHAVE_ADMIN) return { ok: false, erro: 'senha' };
+  
+  if (d.acao === 'eventos') {
+    const l = lista();
+    const rows = l.getDataRange().getValues().slice(1);
+    return { 
+      ok: true, 
+      eventos: rows.map(r => ({ slug: r[0], nome: r[1], encerrado: Boolean(r[3]) })) 
+    };
+  }
+
+  if (d.acao === 'criar') {
+    if (!/^[a-z0-9-]{2,50}$/.test(d.slug) || !d.nome) return { ok: false, erro: 'dados' };
+    if (evento(d.slug)) return { ok: false, erro: 'existe' };
+    lista().appendRow([d.slug, seguro(d.nome), new Date(), '']);
+    
+    const aba = planilha().insertSheet('ev_' + d.slug);
+    aba.appendRow(CAB);
+    estilizarCabecalho(aba);
+    aba.getRange('C:C').setNumberFormat('@'); // E-mail como texto puro
+    return { ok: true };
+  }
+
+  if (d.acao === 'toggle_encerrar') {
+    const l = lista();
+    const data = l.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === d.slug) {
+        const atual = Boolean(data[i][3]);
+        l.getRange(i + 1, 4).setValue(atual ? '' : 'sim');
+        return { ok: true };
+      }
+    }
+    return { ok: false, erro: 'evento' };
+  }
+
+  const ev = evento(d.slug);
+  const aba = planilha().getSheetByName('ev_' + d.slug);
+  if (!aba || !ev) return { ok: false, erro: 'evento' };
+
+  if (d.acao === 'participantes') {
+    const v = aba.getDataRange().getValues().slice(1);
+    return { 
+      ok: true, 
+      rows: v.map((r, i) => ({ 
+        linha: i + 2, 
+        data: r[0] ? new Date(r[0]).toLocaleString('pt-BR') : '',
+        nome: r[1], 
+        email: r[2], 
+        aluno: r[3], 
+        interesse: r[4], 
+        newsletter: r[5],
+        comoSoube: r[6],
+        ganhou: r[7] 
+      })) 
+    };
+  }
+  if (d.acao === 'ganhou') { 
+    aba.getRange(Number(d.linha), 8).setValue('sim'); // Coluna 8 é "Ganhou o Sorteio?"
+    return { ok: true }; 
+  }
+  return { ok: false, erro: 'acao' };
+}
+
+function cadastrar(d) {
+  const ev = evento(d.slug);
+  const aba = planilha().getSheetByName('ev_' + d.slug);
+  if (!aba || !ev || ev.encerrado) return { ok: false, erro: 'evento' };
+
+  const nome = seguro(d.nome);
+  const email = String(d.email || '').trim().toLowerCase();
+  
+  if (!nome || !email || !email.includes('@')) return { ok: false, erro: 'dados' };
+  
+  const aluno = d.aluno === 'sim' ? 'sim' : 'não';
+  const interesse = aluno === 'sim' ? 'Não se aplica' : (d.interesse === 'sim' ? 'sim' : 'não');
+  const newsletter = d.newsletter === 'sim' ? 'sim' : 'não';
+  const comoSoube = seguro(d.como_soube || 'Não informado');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const dataRows = aba.getDataRange().getValues().slice(1);
+    const ja = dataRows.some(r => String(r[2]).trim().toLowerCase() === email);
+    if (ja) return { ok: false, erro: 'duplicado' };
+    
+    aba.appendRow([new Date(), nome, email, aluno, interesse, newsletter, comoSoube, '']);
+    
+    // Reaplica a formatação e o ajuste nas novas linhas adicionadas
+    estilizarCabecalho(aba);
+    
+    return { ok: true };
+  } finally { lock.releaseLock(); }
+}
